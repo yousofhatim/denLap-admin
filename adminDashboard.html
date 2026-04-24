@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>لوحة تحكم المعمل السني</title>
+    <link rel="stylesheet" href="adminDashboard.css">
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">🏭 <span>إدارة المعمل</span></div>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-page="dashboard">
+                    <span class="nav-icon">📊</span>
+                    <span>لوحة المعلومات</span>
+                </button>
+                <button class="nav-btn" data-page="cases">
+                    <span class="nav-icon">📋</span>
+                    <span>جميع الحالات</span>
+                    <span class="badge" id="casesCount">0</span>
+                </button>
+                <button class="nav-btn" data-page="search">
+                    <span class="nav-icon">🔍</span>
+                    <span>بحث متقدم</span>
+                </button>
+                <button class="nav-btn" data-page="doctors">
+                    <span class="nav-icon">👨‍⚕️</span>
+                    <span>إدارة الأطباء</span>
+                </button>
+                <button class="nav-btn" data-page="messages">
+                    <span class="nav-icon">💬</span>
+                    <span>المحادثات</span>
+                    <span class="badge" id="unreadCount">0</span>
+                </button>
+                <button class="nav-btn" data-page="files">
+                    <span class="nav-icon">📁</span>
+                    <span>ملفات الاسكانر</span>
+                </button>
+                <button class="nav-btn" data-page="settings">
+                    <span class="nav-icon">⚙️</span>
+                    <span>الإعدادات</span>
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="admin-info" id="adminInfo">
+                    <div class="admin-avatar">👨‍💼</div>
+                    <div class="admin-details">
+                        <div class="admin-name" id="adminName"></div>
+                        <div class="admin-role">مدير المعمل</div>
+                    </div>
+                </div>
+                <button id="logoutAdminBtn" class="logout-btn">🚪 تسجيل خروج</button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="page-title" id="pageTitle">لوحة المعلومات</div>
+                <div class="top-bar-actions">
+                    <div class="date-time" id="dateTime"></div>
+                    <button class="refresh-btn" id="refreshBtn">🔄 تحديث</button>
+                </div>
+            </header>
+
+            <div class="content-area" id="contentArea">
+                <!-- Dashboard Page -->
+                <div id="dashboardPage" class="page active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">📦</div>
+                            <div class="stat-info">
+                                <h3 id="totalCases">0</h3>
+                                <p>إجمالي الحالات</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">⚙️</div>
+                            <div class="stat-info">
+                                <h3 id="inProgressCases">0</h3>
+                                <p>قيد العمل</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">🏥</div>
+                            <div class="stat-info">
+                                <h3 id="completedCases">0</h3>
+                                <p>مكتملة</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">👨‍⚕️</div>
+                            <div class="stat-info">
+                                <h3 id="totalDoctors">0</h3>
+                                <p>الأطباء المسجلين</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="recent-cases">
+                        <h3>📋 أحدث الحالات</h3>
+                        <div class="cases-table-container">
+                            <table class="cases-table">
+                                <thead>
+                                    <tr><th>المريض</th><th>الطبيب</th><th>الحالة</th><th>التاريخ</th><th>العلاجات</th><th></th></tr>
+                                </thead>
+                                <tbody id="recentCasesList"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cases Page -->
+                <div id="casesPage" class="page">
+                    <div class="page-header">
+                        <h3>جميع حالات المعمل</h3>
+                        <div class="filter-bar">
+                            <select id="statusFilter" class="filter-select">
+                                <option value="all">جميع الحالات</option>
+                                <option value="1">وصول الطلب</option>
+                                <option value="2">إرسال مندوب</option>
+                                <option value="3">قيد العمل</option>
+                                <option value="4">الشحن للعيادة</option>
+                            </select>
+                            <input type="text" id="searchCases" placeholder="🔍 بحث في الحالات..." class="search-input">
+                        </div>
+                    </div>
+                    <div class="cases-list" id="allCasesList"></div>
+                </div>
+
+                <!-- Search Page -->
+                <div id="searchPage" class="page">
+                    <div class="search-advanced">
+                        <h3>بحث متقدم</h3>
+                        <div class="search-form">
+                            <div class="search-row">
+                                <input type="text" id="searchPatientName" placeholder="اسم المريض" class="search-field">
+                                <input type="text" id="searchDoctorName" placeholder="اسم الطبيب" class="search-field">
+                            </div>
+                            <div class="search-row">
+                                <input type="text" id="searchSecretCode" placeholder="الرقم التأكيدي" class="search-field">
+                                <input type="date" id="searchDate" class="search-field">
+                            </div>
+                            <div class="search-row">
+                                <select id="searchStatus" class="search-field">
+                                    <option value="">جميع الحالات</option>
+                                    <option value="1">وصول الطلب</option>
+                                    <option value="2">إرسال مندوب</option>
+                                    <option value="3">قيد العمل</option>
+                                    <option value="4">الشحن للعيادة</option>
+                                </select>
+                                <select id="searchTreatment" class="search-field">
+                                    <option value="">جميع العلاجات</option>
+                                    <option value="zircon">زيركون</option>
+                                    <option value="porcelain">بورسلين</option>
+                                </select>
+                            </div>
+                            <button id="doSearchBtn" class="search-btn">🔍 بحث</button>
+                        </div>
+                        <div id="searchResults" class="search-results"></div>
+                    </div>
+                </div>
+
+                <!-- Doctors Page -->
+                <div id="doctorsPage" class="page">
+                    <div class="page-header">
+                        <h3>👨‍⚕️ إدارة الأطباء والعيادات</h3>
+                        <button id="refreshDoctorsBtn" class="action-btn">🔄 تحديث</button>
+                    </div>
+                    <div class="doctors-list" id="doctorsList"></div>
+                </div>
+
+                <!-- Messages Page -->
+                <div id="messagesPage" class="page">
+                    <div class="page-header">
+                        <h3>💬 محادثات العملاء</h3>
+                        <button id="markAllReadBtn" class="action-btn">✓ تحديد الكل كمقروء</button>
+                    </div>
+                    <div class="conversations-list" id="conversationsList"></div>
+                </div>
+
+                <!-- Files Page -->
+                <div id="filesPage" class="page">
+                    <div class="page-header">
+                        <h3>📁 ملفات الاسكانر</h3>
+                        <div class="file-filter">
+                            <input type="text" id="fileSearch" placeholder="🔍 بحث في الملفات..." class="search-input">
+                        </div>
+                    </div>
+                    <div class="files-grid" id="filesGrid"></div>
+                </div>
+
+                <!-- Settings Page -->
+                <div id="settingsPage" class="page">
+                    <div class="settings-section">
+                        <h3>⚙️ إعدادات النظام</h3>
+                        <div class="settings-form">
+                            <div class="setting-item">
+                                <label>إعدادات الذكاء الاصطناعي</label>
+                                <textarea id="aiPromptSetting" rows="4" placeholder="تعديل البرومبت الخاص بالذكاء الاصطناعي..."></textarea>
+                                <button id="saveAiPromptBtn" class="save-setting-btn">💾 حفظ الإعدادات</button>
+                            </div>
+                            <div class="setting-item">
+                                <label>الرسالة الترحيبية للدردشة</label>
+                                <input type="text" id="welcomeMessageSetting" placeholder="نص الرسالة الترحيبية">
+                                <button id="saveWelcomeMsgBtn" class="save-setting-btn">💾 حفظ</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Case Details Modal -->
+    <div id="caseModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>تفاصيل الحالة</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="caseModalBody"></div>
+            <div class="modal-footer">
+                <button id="sendMessageBtn" class="modal-btn primary">💬 إرسال رسالة للعيادة</button>
+                <button id="updateStatusBtn" class="modal-btn">🔄 تحديث الحالة</button>
+                <button id="downloadFilesBtn" class="modal-btn">📥 تحميل الملفات</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Message Modal -->
+    <div id="messageModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>إرسال رسالة للعيادة</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <textarea id="messageContent" rows="5" placeholder="اكتب رسالتك هنا..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button id="sendMessageConfirmBtn" class="modal-btn primary">📤 إرسال</button>
+                <button class="modal-btn cancel">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Update Modal -->
+    <div id="statusModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>تحديث حالة الطلب</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <select id="newStatusSelect" class="status-select">
+                    <option value="1">📦 وصول الطلب للمعمل</option>
+                    <option value="2">🚚 إرسال مندوب</option>
+                    <option value="3">⚙️ قيد العمل</option>
+                    <option value="4">🏥 الشحن للعيادة</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button id="confirmStatusBtn" class="modal-btn primary">تأكيد التحديث</button>
+                <button class="modal-btn cancel">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <script src="adminDashboard.js"></script>
+</body>
+</html>
