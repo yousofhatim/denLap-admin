@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>لوحة تحكم المعمل السني</title>
+    <title>نظام إدارة المعمل السني - لوحة التحكم</title>
     <link rel="stylesheet" href="adminDashboard.css">
 </head>
 <body>
@@ -11,7 +11,10 @@
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <div class="logo">🏭 <span>إدارة المعمل</span></div>
+                <div class="logo">
+                    <span class="logo-icon">🏭</span>
+                    <span class="logo-text">إدارة المعمل</span>
+                </div>
             </div>
             <nav class="sidebar-nav">
                 <button class="nav-btn active" data-page="dashboard">
@@ -46,10 +49,10 @@
                 </button>
             </nav>
             <div class="sidebar-footer">
-                <div class="admin-info" id="adminInfo">
+                <div class="admin-info">
                     <div class="admin-avatar">👨‍💼</div>
                     <div class="admin-details">
-                        <div class="admin-name" id="adminName"></div>
+                        <div class="admin-name" id="adminName">مدير النظام</div>
                         <div class="admin-role">مدير المعمل</div>
                     </div>
                 </div>
@@ -68,14 +71,40 @@
             </header>
 
             <div class="content-area" id="contentArea">
-                <!-- Dashboard Page -->
+                <!-- ==================== Dashboard Page ==================== -->
                 <div id="dashboardPage" class="page active">
+                    <!-- Date Navigation Bar -->
+                    <div class="date-navigation-bar">
+                        <button id="prevDateBtn" class="date-nav-btn" title="اليوم السابق">▶</button>
+                        <div class="current-date-display">
+                            <span class="date-label">📅 التاريخ:</span>
+                            <span id="currentDateDisplay" class="date-value">اليوم</span>
+                        </div>
+                        <button id="nextDateBtn" class="date-nav-btn" title="اليوم التالي">◀</button>
+                        <button id="todayBtn" class="today-btn">📍 اليوم</button>
+                    </div>
+
+                    <!-- Stats Grid -->
                     <div class="stats-grid">
                         <div class="stat-card">
                             <div class="stat-icon">📦</div>
                             <div class="stat-info">
                                 <h3 id="totalCases">0</h3>
                                 <p>إجمالي الحالات</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">🆕</div>
+                            <div class="stat-info">
+                                <h3 id="newOrdersCount">0</h3>
+                                <p>طلبات جديدة</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">🚚</div>
+                            <div class="stat-info">
+                                <h3 id="shippingCount">0</h3>
+                                <p>قيد الشحن</p>
                             </div>
                         </div>
                         <div class="stat-card">
@@ -86,10 +115,17 @@
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon">🏥</div>
+                            <div class="stat-icon">✅</div>
                             <div class="stat-info">
                                 <h3 id="completedCases">0</h3>
                                 <p>مكتملة</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">🦷</div>
+                            <div class="stat-info">
+                                <h3 id="totalTeethCount">0</h3>
+                                <p>أسنان معالجة</p>
                             </div>
                         </div>
                         <div class="stat-card">
@@ -99,64 +135,121 @@
                                 <p>الأطباء المسجلين</p>
                             </div>
                         </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">📁</div>
+                            <div class="stat-info">
+                                <h3 id="filesCount">0</h3>
+                                <p>ملفات مرفوعة</p>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="recent-cases">
-                        <h3>📋 أحدث الحالات</h3>
-                        <div class="cases-table-container">
-                            <table class="cases-table">
-                                <thead>
-                                    <tr><th>المريض</th><th>الطبيب</th><th>الحالة</th><th>التاريخ</th><th>العلاجات</th><th></th></tr>
-                                </thead>
-                                <tbody id="recentCasesList"></tbody>
-                            </table>
+                    <!-- Two Column Layout -->
+                    <div class="dashboard-two-columns">
+                        <!-- Left Column: Recent Cases -->
+                        <div class="recent-cases-section">
+                            <div class="section-header">
+                                <h3>📋 أحدث الحالات</h3>
+                                <span class="section-badge" id="casesCountBadge">0 حالة</span>
+                            </div>
+                            <div class="cases-table-container">
+                                <table class="cases-table">
+                                    <thead>
+                                        <tr>
+                                            <th>المريض</th>
+                                            <th>الطبيب</th>
+                                            <th>الحالة</th>
+                                            <th>التاريخ</th>
+                                            <th>الأسنان</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="recentCasesList"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Stats & Doctors -->
+                        <div class="right-stats-section">
+                            <!-- Treatment Stats -->
+                            <div class="treatment-stats-card">
+                                <div class="section-header">
+                                    <h3>🏷️ إحصائيات العلاج</h3>
+                                </div>
+                                <div class="treatment-stats-row">
+                                    <div class="treatment-stat-item zircon">
+                                        <span class="treatment-icon">✨</span>
+                                        <div class="treatment-stat-info">
+                                            <span class="treatment-label">زيركون</span>
+                                            <span class="treatment-count" id="zirconCount">0</span>
+                                        </div>
+                                    </div>
+                                    <div class="treatment-stat-item porcelain">
+                                        <span class="treatment-icon">🏺</span>
+                                        <div class="treatment-stat-info">
+                                            <span class="treatment-label">بورسلين</span>
+                                            <span class="treatment-count" id="porcelainCount">0</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Recent Doctors -->
+                            <div class="recent-doctors-card">
+                                <div class="section-header">
+                                    <h3>👨‍⚕️ آخر الأطباء</h3>
+                                    <button class="view-all-btn" onclick="document.querySelector('.nav-btn[data-page=\'doctors\']').click()">عرض الكل</button>
+                                </div>
+                                <div id="recentDoctorsList" class="doctors-mini-list"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Cases Page -->
+                <!-- ==================== Cases Page ==================== -->
                 <div id="casesPage" class="page">
                     <div class="page-header">
-                        <h3>جميع حالات المعمل</h3>
+                        <h3>📋 جميع حالات المعمل</h3>
                         <div class="filter-bar">
                             <select id="statusFilter" class="filter-select">
                                 <option value="all">جميع الحالات</option>
-                                <option value="1">وصول الطلب</option>
-                                <option value="2">إرسال مندوب</option>
-                                <option value="3">قيد العمل</option>
-                                <option value="4">الشحن للعيادة</option>
+                                <option value="1">📦 وصول الطلب</option>
+                                <option value="2">🚚 إرسال مندوب</option>
+                                <option value="3">⚙️ قيد العمل</option>
+                                <option value="4">🏥 الشحن للعيادة</option>
                             </select>
-                            <input type="text" id="searchCases" placeholder="🔍 بحث في الحالات..." class="search-input">
+                            <input type="date" id="dateFilterCases" class="filter-select" placeholder="👇 تصفية حسب التاريخ">
+                            <input type="text" id="searchCases" class="search-input" placeholder="🔍 بحث في الحالات...">
                         </div>
                     </div>
                     <div class="cases-list" id="allCasesList"></div>
                 </div>
 
-                <!-- Search Page -->
+                <!-- ==================== Search Page ==================== -->
                 <div id="searchPage" class="page">
                     <div class="search-advanced">
-                        <h3>بحث متقدم</h3>
+                        <h3>🔍 بحث متقدم في الحالات</h3>
                         <div class="search-form">
                             <div class="search-row">
-                                <input type="text" id="searchPatientName" placeholder="اسم المريض" class="search-field">
-                                <input type="text" id="searchDoctorName" placeholder="اسم الطبيب" class="search-field">
+                                <input type="text" id="searchPatientName" class="search-field" placeholder="👤 اسم المريض">
+                                <input type="text" id="searchDoctorName" class="search-field" placeholder="👨‍⚕️ اسم الطبيب">
                             </div>
                             <div class="search-row">
-                                <input type="text" id="searchSecretCode" placeholder="الرقم التأكيدي" class="search-field">
+                                <input type="text" id="searchSecretCode" class="search-field" placeholder="🔐 الرقم التأكيدي">
                                 <input type="date" id="searchDate" class="search-field">
                             </div>
                             <div class="search-row">
                                 <select id="searchStatus" class="search-field">
-                                    <option value="">جميع الحالات</option>
-                                    <option value="1">وصول الطلب</option>
-                                    <option value="2">إرسال مندوب</option>
-                                    <option value="3">قيد العمل</option>
-                                    <option value="4">الشحن للعيادة</option>
+                                    <option value="">📊 جميع الحالات</option>
+                                    <option value="1">📦 وصول الطلب</option>
+                                    <option value="2">🚚 إرسال مندوب</option>
+                                    <option value="3">⚙️ قيد العمل</option>
+                                    <option value="4">🏥 الشحن للعيادة</option>
                                 </select>
                                 <select id="searchTreatment" class="search-field">
-                                    <option value="">جميع العلاجات</option>
-                                    <option value="zircon">زيركون</option>
-                                    <option value="porcelain">بورسلين</option>
+                                    <option value="">🦷 جميع العلاجات</option>
+                                    <option value="zircon">✨ زيركون</option>
+                                    <option value="porcelain">🏺 بورسلين</option>
                                 </select>
                             </div>
                             <button id="doSearchBtn" class="search-btn">🔍 بحث</button>
@@ -165,16 +258,19 @@
                     </div>
                 </div>
 
-                <!-- Doctors Page -->
+                <!-- ==================== Doctors Page ==================== -->
                 <div id="doctorsPage" class="page">
                     <div class="page-header">
                         <h3>👨‍⚕️ إدارة الأطباء والعيادات</h3>
-                        <button id="refreshDoctorsBtn" class="action-btn">🔄 تحديث</button>
+                        <button id="refreshDoctorsBtn" class="action-btn" onclick="loadDoctors()">🔄 تحديث</button>
+                    </div>
+                    <div class="doctors-stats-bar">
+                        <div class="stat-chip">👨‍⚕️ إجمالي الأطباء: <strong id="totalDoctorsCount">0</strong></div>
                     </div>
                     <div class="doctors-list" id="doctorsList"></div>
                 </div>
 
-                <!-- Messages Page -->
+                <!-- ==================== Messages Page ==================== -->
                 <div id="messagesPage" class="page">
                     <div class="page-header">
                         <h3>💬 محادثات العملاء</h3>
@@ -183,29 +279,30 @@
                     <div class="conversations-list" id="conversationsList"></div>
                 </div>
 
-                <!-- Files Page -->
+                <!-- ==================== Files Page ==================== -->
                 <div id="filesPage" class="page">
                     <div class="page-header">
                         <h3>📁 ملفات الاسكانر</h3>
-                        <div class="file-filter">
-                            <input type="text" id="fileSearch" placeholder="🔍 بحث في الملفات..." class="search-input">
+                        <div class="file-stats">
+                            <span class="stat-chip">📄 إجمالي الملفات: <strong id="totalFilesCount">0</strong></span>
+                            <input type="text" id="fileSearch" class="search-input-small" placeholder="🔍 بحث في الملفات...">
                         </div>
                     </div>
                     <div class="files-grid" id="filesGrid"></div>
                 </div>
 
-                <!-- Settings Page -->
+                <!-- ==================== Settings Page ==================== -->
                 <div id="settingsPage" class="page">
                     <div class="settings-section">
                         <h3>⚙️ إعدادات النظام</h3>
                         <div class="settings-form">
                             <div class="setting-item">
-                                <label>إعدادات الذكاء الاصطناعي</label>
-                                <textarea id="aiPromptSetting" rows="4" placeholder="تعديل البرومبت الخاص بالذكاء الاصطناعي..."></textarea>
+                                <label>🤖 إعدادات الذكاء الاصطناعي - البرومبت الخاص بالمساعد</label>
+                                <textarea id="aiPromptSetting" rows="5" placeholder="أدخل التعليمات الخاصة بالذكاء الاصطناعي..."></textarea>
                                 <button id="saveAiPromptBtn" class="save-setting-btn">💾 حفظ الإعدادات</button>
                             </div>
                             <div class="setting-item">
-                                <label>الرسالة الترحيبية للدردشة</label>
+                                <label>💬 الرسالة الترحيبية للدردشة</label>
                                 <input type="text" id="welcomeMessageSetting" placeholder="نص الرسالة الترحيبية">
                                 <button id="saveWelcomeMsgBtn" class="save-setting-btn">💾 حفظ</button>
                             </div>
@@ -216,18 +313,19 @@
         </main>
     </div>
 
+    <!-- ==================== Modals ==================== -->
     <!-- Case Details Modal -->
     <div id="caseModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>تفاصيل الحالة</h3>
+                <h3>📋 تفاصيل الحالة</h3>
                 <button class="modal-close">&times;</button>
             </div>
             <div class="modal-body" id="caseModalBody"></div>
             <div class="modal-footer">
-                <button id="sendMessageBtn" class="modal-btn primary">💬 إرسال رسالة للعيادة</button>
-                <button id="updateStatusBtn" class="modal-btn">🔄 تحديث الحالة</button>
-                <button id="downloadFilesBtn" class="modal-btn">📥 تحميل الملفات</button>
+                <button id="sendMessageBtn" class="modal-btn primary" onclick="sendMessageToCurrentDoctor()">💬 إرسال رسالة للعيادة</button>
+                <button id="updateStatusBtn" class="modal-btn" onclick="updateCurrentCaseStatus()">🔄 تحديث الحالة</button>
+                <button class="modal-btn cancel" onclick="closeModal()">إغلاق</button>
             </div>
         </div>
     </div>
@@ -236,15 +334,15 @@
     <div id="messageModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>إرسال رسالة للعيادة</h3>
+                <h3>💬 إرسال رسالة للعيادة</h3>
                 <button class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <textarea id="messageContent" rows="5" placeholder="اكتب رسالتك هنا..."></textarea>
+                <textarea id="messageContent" rows="5" placeholder="✏️ اكتب رسالتك هنا..."></textarea>
             </div>
             <div class="modal-footer">
                 <button id="sendMessageConfirmBtn" class="modal-btn primary">📤 إرسال</button>
-                <button class="modal-btn cancel">إلغاء</button>
+                <button class="modal-btn cancel" onclick="closeModal('messageModal')">إلغاء</button>
             </div>
         </div>
     </div>
@@ -253,7 +351,7 @@
     <div id="statusModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>تحديث حالة الطلب</h3>
+                <h3>🔄 تحديث حالة الطلب</h3>
                 <button class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
@@ -266,11 +364,18 @@
             </div>
             <div class="modal-footer">
                 <button id="confirmStatusBtn" class="modal-btn primary">تأكيد التحديث</button>
-                <button class="modal-btn cancel">إلغاء</button>
+                <button class="modal-btn cancel" onclick="closeModal('statusModal')">إلغاء</button>
             </div>
         </div>
     </div>
 
+    <!-- Toast Notification -->
+    <div id="toastNotification" class="toast-notification">
+        <span class="toast-icon">ℹ️</span>
+        <span class="toast-message">رسالة</span>
+    </div>
+
+    <!-- Firebase Scripts -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
