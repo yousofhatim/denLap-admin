@@ -18,6 +18,9 @@ let currentAdmin = null;
 let currentCaseData = null;
 let allCasesCache = [];
 let allDoctorsCache = [];
+let availableDates = []; // قائمة التواريخ المتوفرة في قاعدة البيانات
+let currentDateIndex = 0; // index التاريخ الحالي في قائمة availableDates
+let currentViewDate = null; // التاريخ المعروض حالياً
 
 // ============= دوال مساعدة =============
 function formatDate(timestamp) {
@@ -32,9 +35,24 @@ function formatDateTime(timestamp) {
     return date.toLocaleString('ar-EG');
 }
 
+function formatDateYMD(date) {
+    if (!date) return '';
+    const d = new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatDateDisplay(dateStr) {
+    if (!dateStr) return 'اليوم';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
+}
+
 function getStatusText(status) {
     const statusMap = {
-        1: '📦 وصول الطلب للمعمل',
+        1: '📦 وصول الطلب',
         2: '🚚 إرسال مندوب',
         3: '⚙️ قيد العمل',
         4: '🏥 الشحن للعيادة'
@@ -60,6 +78,7 @@ function loadAdminData() {
     }
     currentAdmin = JSON.parse(adminData);
     document.getElementById('adminName').textContent = currentAdmin.adminName;
+    document.getElementById('adminNameDisplay').textContent = currentAdmin.adminName;
     updateDateTime();
     setInterval(updateDateTime, 1000);
     return currentAdmin;
@@ -80,7 +99,6 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         document.getElementById(`${page}Page`).classList.add('active');
         document.getElementById('pageTitle').textContent = btn.querySelector('span:last-child').textContent;
         
-        // تحميل بيانات الصفحة
         if (page === 'dashboard') loadDashboard();
         else if (page === 'cases') loadAllCases();
         else if (page === 'search') initSearchPage();
@@ -91,8 +109,48 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     });
 });
 
-// ============= 1. لوحة المعلومات (Dashboard) =============
-async function loadDashboard() {
+// ============= جلب التواريخ المتوفرة من قاعدة البيانات =============
+async function fetchAvailableDates() {
+    try {
+        const caseDataRef = database.ref('dental lap/case data');
+        const snapshot = await caseDataRef.once('value');
+        const datesSet = new Set();
+        
+        function extractDates(obj) {
+            if (!obj) return;
+            for (const key in obj) {
+                if (obj[key] && typeof obj[key] === 'object') {
+                    // التحقق إذا كان هذا هو مستوى السنة (أرقام)
+                    if (key.match(/^\d{4}$/)) {
+                        const year = key;
+                        for (const month in obj[key]) {
+                            if (month.match(/^\d{2}$/)) {
+                                for (const day in obj[key][month]) {
+                                    if (day.match(/^\d{2}$/)) {
+                                        datesSet.add(`${year}-${month}-${day}`);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        extractDates(obj[key]);
+                    }
+                }
+            }
+        }
+        
+        extractDates(snapshot.val());
+        
+        availableDates = Array.from(datesSet).sort();
+        return availableDates;
+    } catch (error) {
+        console.error("Error fetching available dates:", error);
+        return [];
+    }
+}
+
+// ============= 1. لوحة المعلومات (Dashboard) المحسنة =============
+async function loadDashboard(dateFilter = null) {
     try {
         showLoading('dashboard');
         
@@ -105,7 +163,6 @@ async function loadDashboard() {
             if (!obj) return;
             for (const key in obj) {
                 if (obj[key] && typeof obj[key] === 'object') {
-                    // التحقق إذا كان هذا كائن حالة (يحتوي على caseId)
                     if (obj[key].caseId && obj[key].patientName) {
                         allCases.push({
                             ...obj[key],
@@ -121,7 +178,6 @@ async function loadDashboard() {
         
         function extractDoctorNameFromPath(path) {
             const parts = path.split('/');
-            // المسار: /year/month/day/doctorName/caseId
             for (let i = parts.length - 1; i >= 0; i--) {
                 if (parts[i] && !parts[i].match(/^\d+$/) && parts[i] !== 'case data') {
                     return parts[i];
@@ -133,43 +189,111 @@ async function loadDashboard() {
         extractCases(snapshot.val());
         allCasesCache = allCases;
         
+        // جلب التواريخ المتوفرة
+        if (availableDates.length === 0) {
+            await fetchAvailableDates();
+        }
+        
+        // تحديث أزرار التنقل في التاريخ
+        updateDateNavigation();
+        
+        // تحديد التاريخ المراد عرضه
+        let targetDate = dateFilter;
+        if (!targetDate && currentViewDate) {
+            targetDate = currentViewDate;
+        }
+        if (!targetDate && availableDates.length > 0) {
+            targetDate = availableDates[availableDates.length - 1]; // آخر تاريخ (الأحدث)
+            currentDateIndex = availableDates.length - 1;
+        }
+        if (targetDate) {
+            currentViewDate = targetDate;
+            document.getElementById('currentDateDisplay').textContent = formatDateDisplay(targetDate);
+        }
+        
+        // فلترة الحالات حسب التاريخ المحدد
+        let filteredCases = allCases;
+        if (targetDate) {
+            filteredCases = allCases.filter(c => c.date === targetDate);
+        }
+        
         // الإحصائيات
-        const totalCases = allCases.length;
-        const inProgress = allCases.filter(c => c.orderStatus === 3).length;
-        const completed = allCases.filter(c => c.orderStatus === 4).length;
-        const newOrders = allCases.filter(c => c.orderStatus === 1).length;
+        const totalCases = filteredCases.length;
+        const inProgress = filteredCases.filter(c => c.orderStatus === 3).length;
+        const completed = filteredCases.filter(c => c.orderStatus === 4).length;
+        const newOrders = filteredCases.filter(c => c.orderStatus === 1).length;
+        const shipping = filteredCases.filter(c => c.orderStatus === 2).length;
         
         document.getElementById('totalCases').textContent = totalCases;
         document.getElementById('inProgressCases').textContent = inProgress;
         document.getElementById('completedCases').textContent = completed;
         document.getElementById('newOrdersCount').textContent = newOrders;
+        document.getElementById('shippingCount').textContent = shipping;
         document.getElementById('casesCount').textContent = totalCases;
         
-        // أحدث 10 حالات
-        const recent = allCases.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 10);
-        const tbody = document.getElementById('recentCasesList');
-        tbody.innerHTML = recent.map(c => `
-            <tr>
-                <td><strong>${escapeHtml(c.patientName || 'غير محدد')}</strong></td>
-                <td>د. ${escapeHtml(c.doctorName || c.clinicName || 'غير محدد')}</td>
-                <td><span class="status-badge ${getStatusClass(c.orderStatus)}">${getStatusText(c.orderStatus)}</span></td>
-                <td>${formatDate(c.date)}</td>
-                <td>${Object.keys(c.toothTreatments || {}).length} سن</td>
-                <td><button class="view-btn" onclick="viewCase('${c.caseId}')">🔍 عرض</button></td>
-            </tr>
-        `).join('');
+        // عرض إحصائيات إضافية
+        const totalTeeth = filteredCases.reduce((sum, c) => sum + Object.keys(c.toothTreatments || {}).length, 0);
+        const hasFiles = filteredCases.filter(c => c.scannerFile).length;
         
-        // عدد الأطباء
+        document.getElementById('totalTeethCount').textContent = totalTeeth;
+        document.getElementById('filesCount').textContent = hasFiles;
+        
+        // عرض الحالات (جميعها أو آخر 10 حسب التاريخ)
+        const casesToShow = targetDate ? filteredCases : filteredCases.slice(0, 10);
+        const tbody = document.getElementById('recentCasesList');
+        
+        if (casesToShow.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="no-data-cell">📭 لا توجد حالات في هذا التاريخ</td></tr>`;
+        } else {
+            tbody.innerHTML = casesToShow.map(c => `
+                <tr>
+                    <td><strong>${escapeHtml(c.patientName || 'غير محدد')}</strong><br><small class="case-id-small">${escapeHtml(c.caseId || '')}</small></td>
+                    <td>د. ${escapeHtml(c.doctorName || c.clinicName || 'غير محدد')}</td>
+                    <td><span class="status-badge ${getStatusClass(c.orderStatus)}">${getStatusText(c.orderStatus)}</span></td>
+                    <td>${formatDateDisplay(c.date)}</td>
+                    <td><span class="teeth-count">${Object.keys(c.toothTreatments || {}).length}</span> سن</td>
+                    <td>
+                        <button class="view-btn small" onclick="viewCase('${c.caseId}')">🔍 عرض</button>
+                        <button class="view-btn small outline" onclick="viewCaseQuick('${c.caseId}')">📋 تفاصيل</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        // عدد الأطباء المسجلين
         const doctorsRef = database.ref('dental lap/data');
         const doctorsSnap = await doctorsRef.once('value');
-        const doctorsCount = doctorsSnap.val() ? Object.keys(doctorsSnap.val()).length : 0;
+        const doctorsData = doctorsSnap.val();
+        const doctorsCount = doctorsData ? Object.keys(doctorsData).length : 0;
         document.getElementById('totalDoctors').textContent = doctorsCount;
         
-        // حالات اليوم
-        const today = new Date();
-        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        const todayCases = allCases.filter(c => c.date === todayStr);
-        document.getElementById('todayCasesCount').textContent = todayCases.length;
+        // عرض آخر 5 أطباء نشطين
+        const activeDoctors = doctorsData ? Object.entries(doctorsData).slice(0, 5) : [];
+        const doctorsListHtml = activeDoctors.map(([name, data]) => `
+            <div class="doctor-mini-card">
+                <div class="doctor-mini-avatar">👨‍⚕️</div>
+                <div class="doctor-mini-info">
+                    <div class="doctor-mini-name">د. ${escapeHtml(name)}</div>
+                    <div class="doctor-mini-clinic">${escapeHtml(data.clinicName || name)}</div>
+                </div>
+            </div>
+        `).join('');
+        
+        document.getElementById('recentDoctorsList').innerHTML = doctorsListHtml || '<div class="no-data-mini">لا يوجد أطباء</div>';
+        
+        // إحصائيات العلاج
+        const treatmentStats = { zircon: 0, porcelain: 0, other: 0 };
+        filteredCases.forEach(c => {
+            const treatments = Object.values(c.toothTreatments || {});
+            treatments.forEach(t => {
+                if (t === 'zircon') treatmentStats.zircon++;
+                else if (t === 'porcelain') treatmentStats.porcelain++;
+                else treatmentStats.other++;
+            });
+        });
+        
+        document.getElementById('zirconCount').textContent = treatmentStats.zircon;
+        document.getElementById('porcelainCount').textContent = treatmentStats.porcelain;
         
         hideLoading('dashboard');
         
@@ -180,12 +304,68 @@ async function loadDashboard() {
     }
 }
 
+// تحديث أزرار التنقل بين التواريخ
+function updateDateNavigation() {
+    const prevBtn = document.getElementById('prevDateBtn');
+    const nextBtn = document.getElementById('nextDateBtn');
+    const dateDisplay = document.getElementById('currentDateDisplay');
+    
+    if (!prevBtn || !nextBtn) return;
+    
+    // تعطيل الأزرار إذا لم تكن هناك تواريخ
+    if (availableDates.length === 0) {
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+        if (dateDisplay) dateDisplay.textContent = 'لا توجد بيانات';
+        return;
+    }
+    
+    // تحديث حالة الأزرار
+    prevBtn.disabled = (currentDateIndex <= 0);
+    nextBtn.disabled = (currentDateIndex >= availableDates.length - 1);
+}
+
+// دوال التنقل بين التواريخ
+function goToPrevDate() {
+    if (currentDateIndex > 0) {
+        currentDateIndex--;
+        currentViewDate = availableDates[currentDateIndex];
+        loadDashboard(currentViewDate);
+    }
+}
+
+function goToNextDate() {
+    if (currentDateIndex < availableDates.length - 1) {
+        currentDateIndex++;
+        currentViewDate = availableDates[currentDateIndex];
+        loadDashboard(currentViewDate);
+    }
+}
+
+function goToToday() {
+    const today = formatDateYMD(new Date());
+    const todayIndex = availableDates.indexOf(today);
+    if (todayIndex !== -1) {
+        currentDateIndex = todayIndex;
+        currentViewDate = today;
+    } else {
+        // إذا لم يكن اليوم موجوداً، اذهب إلى أحدث تاريخ
+        currentDateIndex = availableDates.length - 1;
+        currentViewDate = availableDates[currentDateIndex];
+    }
+    loadDashboard(currentViewDate);
+}
+
+// عرض سريع للحالة
+function viewCaseQuick(caseId) {
+    viewCase(caseId);
+}
+
 // ============= 2. عرض جميع الحالات =============
 async function loadAllCases() {
     try {
         showLoading('cases');
         
-        // استخدام الكاش إذا كان موجوداً
         let allCases = allCasesCache;
         if (allCases.length === 0) {
             const casesRef = database.ref('dental lap/case data');
@@ -211,16 +391,20 @@ async function loadAllCases() {
             allCasesCache = allCases;
         }
         
-        displayCasesList(allCases);
+        // ترتيب حسب التاريخ (الأحدث أولاً)
+        const sortedCases = [...allCases].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        displayCasesList(sortedCases);
         
-        // فلترة وبحث
         const statusFilter = document.getElementById('statusFilter');
         const searchInput = document.getElementById('searchCases');
+        const dateFilterCases = document.getElementById('dateFilterCases');
         
         const filterCases = () => {
             const status = statusFilter.value;
             const search = searchInput.value.toLowerCase();
-            let filtered = [...allCases];
+            const dateFilter = dateFilterCases.value;
+            
+            let filtered = [...sortedCases];
             if (status !== 'all') {
                 filtered = filtered.filter(c => c.orderStatus == status);
             }
@@ -232,11 +416,15 @@ async function loadAllCases() {
                     (c.randomCode && c.randomCode.toLowerCase().includes(search))
                 );
             }
+            if (dateFilter) {
+                filtered = filtered.filter(c => c.date === dateFilter);
+            }
             displayCasesList(filtered);
         };
         
         statusFilter.onchange = filterCases;
         searchInput.oninput = filterCases;
+        dateFilterCases.onchange = filterCases;
         
         hideLoading('cases');
         
@@ -269,7 +457,7 @@ function displayCasesList(cases) {
             <div class="case-details">
                 <div class="detail-item">
                     <span class="detail-icon">👨‍⚕️</span>
-                    <span>الطبيب: د. ${escapeHtml(c.doctorName || c.clinicName || 'غير محدد')}</span>
+                    <span>د. ${escapeHtml(c.doctorName || c.clinicName || 'غير محدد')}</span>
                 </div>
                 <div class="detail-item">
                     <span class="detail-icon">🔐</span>
@@ -277,19 +465,19 @@ function displayCasesList(cases) {
                 </div>
                 <div class="detail-item">
                     <span class="detail-icon">📅</span>
-                    <span>التاريخ: ${formatDate(c.date)}</span>
+                    <span>التاريخ: ${formatDateDisplay(c.date)}</span>
                 </div>
                 <div class="detail-item">
                     <span class="detail-icon">🦷</span>
-                    <span>الأسنان المعالجة: ${Object.keys(c.toothTreatments || {}).length}</span>
+                    <span>الأسنان: ${Object.keys(c.toothTreatments || {}).length}</span>
                 </div>
-                ${c.notes ? `<div class="detail-item notes-preview"><span class="detail-icon">📝</span><span>${escapeHtml(c.notes.substring(0, 100))}${c.notes.length > 100 ? '...' : ''}</span></div>` : ''}
+                ${c.notes ? `<div class="detail-item notes-preview"><span class="detail-icon">📝</span><span>${escapeHtml(c.notes.substring(0, 80))}${c.notes.length > 80 ? '...' : ''}</span></div>` : ''}
             </div>
             <div class="case-actions">
-                <button class="action-btn small" onclick="viewCase('${c.caseId}')">🔍 عرض التفاصيل</button>
+                <button class="action-btn small" onclick="viewCase('${c.caseId}')">🔍 التفاصيل</button>
                 <button class="action-btn small" onclick="viewCaseConversation('${c.caseId}')">💬 المحادثة</button>
-                ${c.scannerFile ? `<button class="action-btn small" onclick="viewCaseFiles('${c.caseId}')">📁 الملفات</button>` : ''}
-                <button class="action-btn small" onclick="updateCaseStatus('${c.caseId}', ${c.orderStatus || 1})">🔄 تحديث الحالة</button>
+                ${c.scannerFile ? `<button class="action-btn small" onclick="downloadFileFromCase('${c.caseId}')">📁 الملف</button>` : ''}
+                <button class="action-btn small" onclick="updateCaseStatusQuick('${c.caseId}', ${c.orderStatus || 1})">🔄 تحديث</button>
             </div>
         </div>
     `).join('');
@@ -314,7 +502,6 @@ async function performAdvancedSearch() {
     showLoading('search');
     
     try {
-        // استخدام الفهرس للبحث بالرقم التأكيدي إذا وجد
         if (secretCode) {
             const indexRef = database.ref(`dental lap/case data/index/${secretCode}`);
             const indexSnap = await indexRef.once('value');
@@ -329,7 +516,6 @@ async function performAdvancedSearch() {
             }
         }
         
-        // البحث في جميع الحالات
         let results = [...allCasesCache];
         if (allCasesCache.length === 0) {
             const casesRef = database.ref('dental lap/case data');
@@ -352,7 +538,6 @@ async function performAdvancedSearch() {
             results = [...allCasesCache];
         }
         
-        // تطبيق الفلاتر
         if (patientName) {
             results = results.filter(c => c.patientName && c.patientName.toLowerCase().includes(patientName.toLowerCase()));
         }
@@ -398,7 +583,7 @@ function displaySearchResults(results) {
     }
     
     container.innerHTML = `
-        <div class="search-summary">🔍 تم العثور على ${results.length} نتيجة</div>
+        <div class="search-summary">🔍 تم العثور على <strong>${results.length}</strong> نتيجة</div>
         <div class="search-results-list">
             ${results.map(c => `
                 <div class="case-item compact">
@@ -408,11 +593,11 @@ function displaySearchResults(results) {
                     </div>
                     <div class="case-details">
                         <div>👨‍⚕️ د. ${escapeHtml(c.doctorName || c.clinicName)}</div>
-                        <div>🔐 ${escapeHtml(c.randomCode || '')}</div>
-                        <div>📅 ${formatDate(c.date)}</div>
+                        <div>🔐 <span class="secret-code">${escapeHtml(c.randomCode || '')}</span></div>
+                        <div>📅 ${formatDateDisplay(c.date)}</div>
                     </div>
                     <div class="case-actions">
-                        <button class="action-btn small" onclick="viewCase('${c.caseId}')">عرض</button>
+                        <button class="action-btn small" onclick="viewCase('${c.caseId}')">🔍 عرض</button>
                     </div>
                 </div>
             `).join('')}
@@ -436,7 +621,6 @@ async function loadDoctors() {
             return;
         }
         
-        // جلب عدد الحالات لكل طبيب
         const casesCount = {};
         for (const c of allCasesCache) {
             const doctorKey = c.doctorName || c.clinicName;
@@ -445,29 +629,36 @@ async function loadDoctors() {
             }
         }
         
-        container.innerHTML = Object.entries(doctors).map(([name, data]) => `
-            <div class="doctor-card" data-doctor="${escapeHtml(name)}">
+        const doctorsArray = Object.entries(doctors).map(([name, data]) => ({
+            name,
+            ...data,
+            casesCount: casesCount[name] || 0
+        })).sort((a, b) => b.casesCount - a.casesCount);
+        
+        container.innerHTML = doctorsArray.map(doc => `
+            <div class="doctor-card" data-doctor="${escapeHtml(doc.name)}">
                 <div class="doctor-avatar">
                     <span class="avatar-icon">👨‍⚕️</span>
                 </div>
                 <div class="doctor-info">
-                    <div class="doctor-name">د. ${escapeHtml(name)}</div>
+                    <div class="doctor-name">د. ${escapeHtml(doc.name)}</div>
                     <div class="doctor-details">
-                        <span class="detail-badge">🏥 ${escapeHtml(data.clinicName || name)}</span>
-                        <span class="detail-badge">📞 ${escapeHtml(data.phoneNumber || data.clinicNumber || 'غير محدد')}</span>
-                        <span class="detail-badge">📧 ${escapeHtml(data.email || 'غير محدد')}</span>
-                        <span class="detail-badge">📍 ${escapeHtml(data.governorate || '')} - ${escapeHtml(data.area || '')}</span>
-                        <span class="detail-badge">📋 ${casesCount[name] || 0} حالة</span>
+                        <span class="detail-badge">🏥 ${escapeHtml(doc.clinicName || doc.name)}</span>
+                        <span class="detail-badge">📞 ${escapeHtml(doc.phoneNumber || doc.clinicNumber || 'غير محدد')}</span>
+                        <span class="detail-badge">📧 ${escapeHtml(doc.email || 'غير محدد')}</span>
+                        <span class="detail-badge">📍 ${escapeHtml(doc.governorate || '')} ${doc.area ? '- ' + escapeHtml(doc.area) : ''}</span>
+                        <span class="detail-badge cases-badge">📋 ${doc.casesCount} حالة</span>
                     </div>
                 </div>
                 <div class="doctor-actions">
-                    <button class="action-btn small" onclick="viewDoctorCases('${escapeHtml(name)}')">📋 الحالات</button>
-                    <button class="action-btn small" onclick="sendMessageToDoctor('${escapeHtml(name)}')">💬 رسالة</button>
-                    <button class="action-btn small" onclick="editDoctorInfo('${escapeHtml(name)}')">✏️ تعديل</button>
+                    <button class="action-btn small" onclick="viewDoctorCases('${escapeHtml(doc.name)}')">📋 الحالات</button>
+                    <button class="action-btn small" onclick="sendMessageToDoctor('${escapeHtml(doc.name)}')">💬 رسالة</button>
+                    <button class="action-btn small" onclick="editDoctorInfo('${escapeHtml(doc.name)}')">✏️ تعديل</button>
                 </div>
             </div>
         `).join('');
         
+        document.getElementById('totalDoctorsCount').textContent = doctorsArray.length;
         hideLoading('doctors');
         
     } catch (error) {
@@ -487,7 +678,6 @@ async function viewDoctorCases(doctorName) {
         return;
     }
     
-    // التبديل إلى صفحة الحالات وعرض حالات هذا الطبيب
     document.querySelector('.nav-btn[data-page="cases"]').click();
     setTimeout(() => {
         document.getElementById('searchCases').value = doctorName;
@@ -537,7 +727,6 @@ async function loadConversations() {
     try {
         showLoading('messages');
         
-        // جمع جميع المحادثات من الحالات
         const conversations = [];
         for (const c of allCasesCache) {
             if (c.conversation && c.conversation.length > 0) {
@@ -547,19 +736,22 @@ async function loadConversations() {
                     doctorName: c.doctorName || c.clinicName,
                     conversation: c.conversation,
                     lastUpdated: c.lastMessageTime || c.createdAt,
-                    lastMessage: c.conversation[c.conversation.length - 1]?.content || ''
+                    lastMessage: c.conversation[c.conversation.length - 1]?.content || '',
+                    messageCount: c.conversation.length
                 });
             }
         }
         
+        const sortedConv = conversations.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
         const container = document.getElementById('conversationsList');
-        if (conversations.length === 0) {
+        
+        if (sortedConv.length === 0) {
             container.innerHTML = '<div class="no-data">💬 لا توجد محادثات</div>';
             hideLoading('messages');
             return;
         }
         
-        container.innerHTML = conversations.map(c => `
+        container.innerHTML = sortedConv.map(c => `
             <div class="conversation-card" onclick="viewFullConversation('${c.caseId}')">
                 <div class="conversation-header">
                     <div class="conversation-info">
@@ -569,15 +761,15 @@ async function loadConversations() {
                     <div class="conversation-date">${formatDateTime(c.lastUpdated)}</div>
                 </div>
                 <div class="conversation-preview">
-                    💬 ${escapeHtml(c.lastMessage.substring(0, 120))}${c.lastMessage.length > 120 ? '...' : ''}
+                    💬 ${escapeHtml(c.lastMessage.substring(0, 100))}${c.lastMessage.length > 100 ? '...' : ''}
                 </div>
                 <div class="conversation-stats">
-                    <span class="msg-count">📨 ${c.conversation.length} رسالة</span>
+                    <span class="msg-count">📨 ${c.messageCount} رسالة</span>
                 </div>
             </div>
         `).join('');
         
-        document.getElementById('unreadCount').textContent = conversations.length;
+        document.getElementById('unreadCount').textContent = sortedConv.length;
         hideLoading('messages');
         
     } catch (error) {
@@ -597,8 +789,10 @@ async function viewFullConversation(caseId) {
         
         const modalBody = document.getElementById('caseModalBody');
         const conversationHtml = caseData.conversation.map(msg => `
-            <div class="conversation-message ${msg.role === 'user' ? 'user-msg' : 'bot-msg'}">
-                <div class="message-sender">${msg.role === 'user' ? '👤 الطبيب' : '🤖 المساعد'}</div>
+            <div class="conversation-message ${msg.role === 'user' ? 'user-msg' : msg.role === 'admin' ? 'admin-msg' : 'bot-msg'}">
+                <div class="message-sender">
+                    ${msg.role === 'user' ? '👤 الطبيب' : msg.role === 'admin' ? '👨‍💼 الإدارة' : '🤖 المساعد'}
+                </div>
                 <div class="message-content">${escapeHtml(msg.content)}</div>
                 <div class="message-time">${msg.timestamp ? formatDateTime(msg.timestamp) : ''}</div>
             </div>
@@ -607,14 +801,15 @@ async function viewFullConversation(caseId) {
         modalBody.innerHTML = `
             <div class="conversation-full-view">
                 <div class="conv-header">
-                    <h4>محادثة حالة المريض: ${escapeHtml(caseData.patientName)}</h4>
-                    <p>د. ${escapeHtml(caseData.doctorName || caseData.clinicName)}</p>
+                    <h4>💬 محادثة حالة المريض: ${escapeHtml(caseData.patientName)}</h4>
+                    <p>👨‍⚕️ د. ${escapeHtml(caseData.doctorName || caseData.clinicName)}</p>
+                    <p>🔐 الرقم التأكيدي: <strong class="secret-code">${escapeHtml(caseData.randomCode || 'غير متوفر')}</strong></p>
                 </div>
                 <div class="conv-messages">
                     ${conversationHtml}
                 </div>
                 <div class="conv-reply">
-                    <textarea id="adminReplyMsg" rows="3" placeholder="اكتب ردك هنا..."></textarea>
+                    <textarea id="adminReplyMsg" rows="3" placeholder="✏️ اكتب ردك هنا..."></textarea>
                     <button class="action-btn" onclick="sendAdminReply('${caseId}')">📤 إرسال رد</button>
                 </div>
             </div>
@@ -636,7 +831,6 @@ async function sendAdminReply(caseId) {
     }
     
     try {
-        // البحث عن الحالة وتحديث المحادثة
         const caseData = await findCaseByPath(caseId);
         if (!caseData) {
             showToast('لم يتم العثور على الحالة', 'error');
@@ -651,7 +845,6 @@ async function sendAdminReply(caseId) {
             from: currentAdmin.adminName
         });
         
-        // تحديث في قاعدة البيانات
         const caseRef = await getCaseRef(caseId);
         if (caseRef) {
             await caseRef.update({
@@ -662,7 +855,8 @@ async function sendAdminReply(caseId) {
             
             showToast('✅ تم إرسال الرد بنجاح', 'success');
             document.getElementById('adminReplyMsg').value = '';
-            viewFullConversation(caseId); // تحديث العرض
+            viewFullConversation(caseId);
+            loadConversations();
         }
         
     } catch (error) {
@@ -685,7 +879,8 @@ async function loadFiles() {
                     caseId: c.caseId,
                     patientName: c.patientName,
                     doctorName: c.doctorName || c.clinicName,
-                    uploadedAt: c.scannerUploadedAt
+                    uploadedAt: c.scannerUploadedAt,
+                    fileType: c.scannerFile.split('.').pop().toUpperCase()
                 });
             }
         }
@@ -699,12 +894,13 @@ async function loadFiles() {
         
         container.innerHTML = files.map(f => `
             <div class="file-card">
-                <div class="file-icon">📄</div>
-                <div class="file-name" title="${escapeHtml(f.fileName)}">${escapeHtml(f.fileName.substring(0, 30))}${f.fileName.length > 30 ? '...' : ''}</div>
+                <div class="file-icon">${getFileIcon(f.fileType)}</div>
+                <div class="file-name" title="${escapeHtml(f.fileName)}">${escapeHtml(f.fileName.substring(0, 35))}${f.fileName.length > 35 ? '...' : ''}</div>
                 <div class="file-meta">
-                    <div>👤 ${escapeHtml(f.patientName)}</div>
-                    <div>👨‍⚕️ د. ${escapeHtml(f.doctorName)}</div>
-                    <div>📅 ${formatDateTime(f.uploadedAt)}</div>
+                    <div><span class="meta-label">👤 المريض:</span> ${escapeHtml(f.patientName)}</div>
+                    <div><span class="meta-label">👨‍⚕️ الطبيب:</span> د. ${escapeHtml(f.doctorName)}</div>
+                    <div><span class="meta-label">📅 الرفع:</span> ${formatDateTime(f.uploadedAt)}</div>
+                    <div><span class="meta-label">📄 النوع:</span> ${f.fileType}</div>
                 </div>
                 <div class="file-actions">
                     <a href="${f.fileUrl}" target="_blank" class="file-action-btn">👁️ معاينة</a>
@@ -714,7 +910,8 @@ async function loadFiles() {
             </div>
         `).join('');
         
-        // فلترة الملفات
+        document.getElementById('totalFilesCount').textContent = files.length;
+        
         const fileSearch = document.getElementById('fileSearch');
         fileSearch.oninput = () => {
             const search = fileSearch.value.toLowerCase();
@@ -734,6 +931,15 @@ async function loadFiles() {
     }
 }
 
+function getFileIcon(fileType) {
+    const type = fileType.toLowerCase();
+    if (type === 'pdf') return '📕';
+    if (type === 'jpg' || type === 'jpeg') return '🖼️';
+    if (type === 'png') return '🖼️';
+    if (type === 'zip' || type === 'rar' || type === '7z') return '📦';
+    return '📄';
+}
+
 function downloadFile(url, fileName) {
     const a = document.createElement('a');
     a.href = url;
@@ -741,6 +947,16 @@ function downloadFile(url, fileName) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    showToast(`جاري تحميل: ${fileName}`, 'info');
+}
+
+function downloadFileFromCase(caseId) {
+    const caseData = allCasesCache.find(c => c.caseId === caseId);
+    if (caseData && caseData.scannerFileUrl) {
+        downloadFile(caseData.scannerFileUrl, caseData.scannerFile);
+    } else {
+        showToast('لا يوجد ملف لهذه الحالة', 'warning');
+    }
 }
 
 // ============= 7. الإعدادات =============
@@ -789,8 +1005,8 @@ async function viewCase(caseId) {
         currentCaseData = caseData;
         
         const treatmentsList = caseData.toothTreatments 
-            ? Object.entries(caseData.toothTreatments).map(([t, v]) => `<span class="treatment-tag">سن ${t}: ${v}</span>`).join('')
-            : 'لا يوجد';
+            ? Object.entries(caseData.toothTreatments).map(([t, v]) => `<span class="treatment-tag">🦷 سن ${t}: ${v}</span>`).join('')
+            : '<span class="no-data-mini">لا يوجد</span>';
         
         const modalBody = document.getElementById('caseModalBody');
         modalBody.innerHTML = `
@@ -798,13 +1014,13 @@ async function viewCase(caseId) {
                 <div class="detail-section">
                     <h4>📋 معلومات أساسية</h4>
                     <div class="detail-grid">
-                        <div><span class="label">🆔 معرف الحالة:</span> ${escapeHtml(caseData.caseId)}</div>
-                        <div><span class="label">🔐 الرقم التأكيدي:</span> <strong class="secret-code">${escapeHtml(caseData.randomCode || 'غير متوفر')}</strong></div>
-                        <div><span class="label">👤 اسم المريض:</span> ${escapeHtml(caseData.patientName)}</div>
-                        <div><span class="label">👨‍⚕️ الطبيب:</span> د. ${escapeHtml(caseData.doctorName || caseData.clinicName)}</div>
-                        <div><span class="label">🏥 العيادة:</span> ${escapeHtml(caseData.clinicName || 'غير محدد')}</div>
-                        <div><span class="label">📅 تاريخ التسجيل:</span> ${formatDate(caseData.date)}</div>
-                        <div><span class="label">📊 حالة الطلب:</span> <span class="status-badge ${getStatusClass(caseData.orderStatus)}">${getStatusText(caseData.orderStatus)}</span></div>
+                        <div class="detail-row"><span class="label">🆔 معرف الحالة:</span> <span class="value">${escapeHtml(caseData.caseId)}</span></div>
+                        <div class="detail-row"><span class="label">🔐 الرقم التأكيدي:</span> <strong class="secret-code">${escapeHtml(caseData.randomCode || 'غير متوفر')}</strong></div>
+                        <div class="detail-row"><span class="label">👤 اسم المريض:</span> <span class="value">${escapeHtml(caseData.patientName)}</span></div>
+                        <div class="detail-row"><span class="label">👨‍⚕️ الطبيب:</span> <span class="value">د. ${escapeHtml(caseData.doctorName || caseData.clinicName)}</span></div>
+                        <div class="detail-row"><span class="label">🏥 العيادة:</span> <span class="value">${escapeHtml(caseData.clinicName || 'غير محدد')}</span></div>
+                        <div class="detail-row"><span class="label">📅 تاريخ التسجيل:</span> <span class="value">${formatDateDisplay(caseData.date)}</span></div>
+                        <div class="detail-row"><span class="label">📊 حالة الطلب:</span> <span class="status-badge ${getStatusClass(caseData.orderStatus)}">${getStatusText(caseData.orderStatus)}</span></div>
                     </div>
                 </div>
                 
@@ -833,7 +1049,7 @@ async function viewCase(caseId) {
                 <div class="detail-section">
                     <h4>📅 تتبع الحالة</h4>
                     <div class="timeline">
-                        ${caseData.statusHistory ? Object.entries(caseData.statusHistory).map(([status, time]) => `
+                        ${caseData.statusHistory ? Object.entries(caseData.statusHistory).sort((a,b) => a[0]-b[0]).map(([status, time]) => `
                             <div class="timeline-item">
                                 <div class="timeline-icon">${getStatusIcon(parseInt(status))}</div>
                                 <div class="timeline-content">
@@ -841,7 +1057,7 @@ async function viewCase(caseId) {
                                     <div class="timeline-date">${formatDateTime(time)}</div>
                                 </div>
                             </div>
-                        `).join('') : '<div>لا يوجد سجل</div>'}
+                        `).join('') : '<div class="no-data-mini">لا يوجد سجل</div>'}
                     </div>
                 </div>
             </div>
@@ -860,7 +1076,7 @@ function getStatusIcon(status) {
     return icons[status] || '📋';
 }
 
-async function updateCaseStatus(caseId, currentStatus) {
+async function updateCaseStatusQuick(caseId, currentStatus) {
     const newStatus = prompt(`حالة الطلب الحالية: ${getStatusText(currentStatus)}\n\nأدخل الحالة الجديدة (1-4):\n1 = وصول الطلب\n2 = إرسال مندوب\n3 = قيد العمل\n4 = الشحن للعيادة`, currentStatus);
     
     if (!newStatus) return;
@@ -873,8 +1089,9 @@ async function updateCaseStatus(caseId, currentStatus) {
     try {
         const caseRef = await getCaseRef(caseId);
         if (caseRef) {
+            const caseData = await findCaseByPath(caseId);
             const now = Date.now();
-            const statusHistory = currentCaseData?.statusHistory || {};
+            const statusHistory = caseData?.statusHistory || {};
             statusHistory[statusNum] = now;
             
             await caseRef.update({
@@ -884,7 +1101,7 @@ async function updateCaseStatus(caseId, currentStatus) {
             });
             
             showToast(`✅ تم تحديث حالة الطلب إلى: ${getStatusText(statusNum)}`, 'success');
-            loadDashboard();
+            loadDashboard(currentViewDate);
             loadAllCases();
         }
     } catch (error) {
@@ -893,7 +1110,6 @@ async function updateCaseStatus(caseId, currentStatus) {
     }
 }
 
-// دالة مساعدة للحصول على مرجع الحالة
 async function getCaseRef(caseId) {
     for (const c of allCasesCache) {
         if (c.caseId === caseId && c.date) {
@@ -931,32 +1147,15 @@ function hideLoading(pageId) {
 }
 
 function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `toast-notification ${type}`;
-    toast.innerHTML = `
-        <span class="toast-icon">${type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️'}</span>
-        <span>${message}</span>
-    `;
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
+    const toast = document.getElementById('toastNotification');
+    if (toast) {
+        toast.className = `toast-notification ${type}`;
+        toast.innerHTML = `<span class="toast-icon">${type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️'}</span><span>${message}</span>`;
         toast.classList.add('show');
         setTimeout(() => {
             toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 300);
         }, 3000);
-    }, 10);
-}
-
-function viewCaseFiles(caseId) {
-    document.querySelector('.nav-btn[data-page="files"]').click();
-    setTimeout(() => {
-        const fileSearch = document.getElementById('fileSearch');
-        if (fileSearch) {
-            fileSearch.value = caseId;
-            fileSearch.dispatchEvent(new Event('input'));
-        }
-    }, 100);
+    }
 }
 
 function viewCaseConversation(caseId) {
@@ -966,7 +1165,6 @@ function viewCaseConversation(caseId) {
 function sendMessageToDoctor(doctorName) {
     const message = prompt(`💬 إرسال رسالة إلى د. ${doctorName}\n\nاكتب رسالتك:`);
     if (message && message.trim()) {
-        // حفظ الرسالة في إشعارات الطبيب
         saveNotification(doctorName, message);
     }
 }
@@ -998,13 +1196,17 @@ async function handleLogout() {
 document.getElementById('logoutAdminBtn')?.addEventListener('click', handleLogout);
 document.getElementById('refreshBtn')?.addEventListener('click', () => {
     const activePage = document.querySelector('.nav-btn.active')?.dataset.page;
-    if (activePage === 'dashboard') loadDashboard();
+    if (activePage === 'dashboard') loadDashboard(currentViewDate);
     else if (activePage === 'cases') loadAllCases();
     else if (activePage === 'doctors') loadDoctors();
     else if (activePage === 'messages') loadConversations();
     else if (activePage === 'files') loadFiles();
     showToast('🔄 تم تحديث البيانات', 'success');
 });
+
+document.getElementById('prevDateBtn')?.addEventListener('click', goToPrevDate);
+document.getElementById('nextDateBtn')?.addEventListener('click', goToNextDate);
+document.getElementById('todayBtn')?.addEventListener('click', goToToday);
 
 // ============= إغلاق المودال =============
 document.querySelectorAll('.modal-close, .modal .cancel').forEach(btn => {
@@ -1016,11 +1218,11 @@ document.querySelectorAll('.modal-close, .modal .cancel').forEach(btn => {
 });
 
 // ============= تهيئة الصفحة =============
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     if (!loadAdminData()) return;
-    loadDashboard();
+    await fetchAvailableDates();
+    await loadDashboard();
     
-    // إغلاق المودال عند الضغط على الخلفية
     document.querySelectorAll('.modal').forEach(modal => {
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
