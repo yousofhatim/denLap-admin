@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>لوحة الإدارة - مخبر الأسنان</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body>
+    <div class="admin-container">
+
+      <div class="admin-header">
+        <div class="logo-area">
+          <h1>🦷 مخبر الأسنان</h1>
+          <p>لوحة التحكم الإدارية</p>
+        </div>
+        <div class="admin-info">
+          <span class="admin-name" id="adminName">مرحباً المدير</span>
+          <button class="logout-btn" id="logoutBtn">🚪 خروج</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">👨‍⚕️</div>
+          <div class="stat-info">
+            <h3 id="totalDoctors">0</h3>
+            <p>عدد الأطباء</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📋</div>
+          <div class="stat-info">
+            <h3 id="totalCases">0</h3>
+            <p>عدد الحالات</p>
+          </div>
+        </div>
+        <div class="stat-card revenue-card" id="revenueCard">
+          <div class="stat-icon">💰</div>
+          <div class="stat-info">
+            <h3>0 ج.م</h3>
+            <p>الإيرادات اليومية</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📊</div>
+          <div class="stat-info">
+            <h3 id="totalOutstanding">0 ج.م</h3>
+            <p>المستحقات الخارجية</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="search-section">
+        <div class="search-row">
+          <div class="search-group">
+            <input type="text" id="searchInput" placeholder="🔍 ابحث بالاسم، الكود، أو الطبيب..." />
+            <button class="search-btn" id="searchBtn">بحث</button>
+            <button class="reset-btn" id="resetSearchBtn">إعادة تعيين</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <select class="filter-select" id="filterDoctor">
+            <option value="">جميع الأطباء</option>
+          </select>
+          <select class="filter-select" id="filterStatus">
+            <option value="">جميع الحالات</option>
+            <option value="1">📥 مجمع الحالات</option>
+            <option value="2">📦 وصول الطلب</option>
+            <option value="3">🛵 وصول المندوب</option>
+            <option value="4">🏭 المعمل</option>
+            <option value="5">🏥 الشحن للعيادة</option>
+          </select>
+          <select class="filter-select" id="filterPayment">
+            <option value="">حالة الدفع</option>
+            <option value="paid">مدفوعة ✅</option>
+            <option value="partial">مدفوعة جزئياً</option>
+            <option value="unpaid">غير مدفوعة ❌</option>
+          </select>
+          <select class="filter-select" id="filterHasScanner">
+            <option value="">ملف السكان</option>
+            <option value="yes">يوجد ملف 📎</option>
+            <option value="no">لا يوجد ملف</option>
+          </select>
+          <input type="date" class="filter-date" id="filterDate" />
+        </div>
+      </div>
+
+      <div class="admin-tabs">
+        <button class="tab-btn active" data-tab="doctors">👨‍⚕️ الأطباء</button>
+        <button class="tab-btn" data-tab="cases">📋 الحالات</button>
+        <button class="tab-btn" data-tab="workflow">🏭 سير العمل</button>
+        <button class="tab-btn" data-tab="waiting">📥 مجمع الحالات</button>
+        <button class="tab-btn" data-tab="invoices">💰 الفواتير</button>
+      </div>
+
+      <div class="tab-content active" id="doctorsTab">
+        <div class="doctors-grid" id="doctorsGrid">
+          <div class="loading-spinner">⏳ جاري التحميل...</div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="casesTab">
+        <div id="casesList">
+          <div class="loading-spinner">⏳ جاري تحميل الحالات...</div>
+        </div>
+        <div class="pagination" id="casesPagination"></div>
+      </div>
+
+      <div class="tab-content" id="workflowTab">
+        <div id="workflowContent">
+          <div class="loading-spinner">⏳ جاري تحميل سير العمل...</div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="waitingTab">
+        <div class="waiting-summary" id="waitingSummary"></div>
+        <div id="waitingList">
+          <div class="loading-spinner">⏳ جاري التحميل...</div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="invoicesTab">
+        <div id="invoicesSummary"></div>
+        <div id="invoicesList">
+          <div class="loading-spinner">⏳ جاري تحميل الفواتير...</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Card View Modal -->
+    <div class="modal" id="caseCardModal">
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h2>📋 تفاصيل الحالة</h2>
+          <button class="modal-close">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 0;">
+
+          <div class="card-info-bar">
+            <div class="card-info-item"><strong>👤</strong> <span id="cardPatientName"></span></div>
+            <div class="card-info-item"><strong>👨‍⚕️</strong> <span id="cardDoctorName"></span></div>
+            <div class="card-info-item"><strong>📅</strong> <span id="cardDate"></span></div>
+            <div class="card-info-item" id="cardStatus"></div>
+            <div class="card-info-item"><strong>🔐</strong> <span id="cardCode" style="font-family:monospace;color:#ffd700;"></span></div>
+          </div>
+
+          <div class="card-summary-bar">
+            <div class="card-summary-item"><span class="label">💰 الإجمالي</span><span class="value" id="cardTotal">0</span></div>
+            <div class="card-summary-item"><span class="label">💵 المدفوع</span><span class="value paid" id="cardPaid">0</span></div>
+            <div class="card-summary-item"><span class="label">📊 المتبقي</span><span class="value remaining" id="cardRemaining">0</span></div>
+          </div>
+
+          <div id="cardScannerArea" style="padding: 0 20px;"></div>
+          <div id="cardNotesArea" style="padding: 0 20px;"></div>
+          <div id="cardCopyArea" style="padding: 0 20px;"></div>
+
+          <div class="card-tabs">
+            <button class="card-tab-btn active" data-card-tab="details">🦷 الأسنان والتفاصيل</button>
+            <button class="card-tab-btn" data-card-tab="invoice">💰 الفاتورة والدفعات</button>
+            <button class="card-tab-btn" data-card-tab="conversation">💬 المحادثة</button>
+          </div>
+
+          <div class="card-tab-content active" id="cardDetailsTab" style="padding: 20px;">
+            <div class="teeth-diagram-container" style="min-height: 580px;">
+              <div class="teeth-wrapper" id="cardTeethWrapper" style="position:relative; min-height:560px;"></div>
+            </div>
+          </div>
+
+          <div class="card-tab-content" id="cardInvoiceTab" style="padding: 20px;">
+            <div id="cardInvoiceContent"></div>
+          </div>
+
+          <div class="card-tab-content" id="cardConversationTab" style="padding: 20px;">
+            <div id="cardConversationContent"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Download Progress -->
+    <div class="download-progress" id="downloadProgress" style="display:none;">
+      <span id="downloadProgressText">جاري التحميل...</span>
+      <div class="download-progress-bar">
+        <div class="download-progress-fill" id="downloadProgressFill"></div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <script src="admin.js"></script>
+  </body>
+</html>
