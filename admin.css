@@ -841,3 +841,217 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.3);
     flex-shrink: 0;
 }
+
+.has-unread {
+    border: 2px solid #ff5252 !important;
+    box-shadow: 0 0 12px rgba(255, 82, 82, 0.4) !important;
+    animation: unreadPulse 2s infinite;
+}
+
+@keyframes unreadPulse {
+    0%, 100% { box-shadow: 0 0 12px rgba(255, 82, 82, 0.4); }
+    50% { box-shadow: 0 0 20px rgba(255, 82, 82, 0.7); }
+}
+
+.unread-badge {
+    background: #ff5252;
+    color: white;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    animation: unreadBlink 1.5s infinite;
+}
+
+@keyframes unreadBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.tab-notif-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #ff5252;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    margin-right: 6px;
+    padding: 0 5px;
+    animation: unreadBlink 1.5s infinite;
+}
+
+.conv-notif-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background: #ff5252;
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: unreadBlink 1.5s infinite;
+    vertical-align: middle;
+}
+
+.archive-subtabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 6px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 12px;
+}
+.archive-subtab {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #90a4ae;
+    padding: 10px 16px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    border-radius: 8px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.archive-subtab:hover { color: white; background: rgba(255, 255, 255, 0.05); }
+.archive-subtab.active {
+    background: rgba(0, 0, 0, 0.45);
+    color: #ffd700;
+    border: 1px solid rgba(255, 215, 0, 0.25);
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.subtab-count {
+    background: rgba(0, 0, 0, 0.3);
+    color: inherit;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    min-width: 24px;
+    text-align: center;
+}
+.archive-subtab.active .subtab-count {
+    background: rgba(255, 215, 0, 0.15);
+    color: #ffd700;
+}
+
+.mini-teeth-preview {
+    margin: 8px 0 4px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.mini-teeth-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+.mini-teeth-title {
+    font-size: 0.7rem;
+    color: #90a4ae;
+    font-weight: 600;
+}
+.mini-teeth-count {
+    font-size: 0.7rem;
+    color: #ffd700;
+    font-weight: 700;
+    background: rgba(255, 215, 0, 0.1);
+    padding: 1px 8px;
+    border-radius: 10px;
+}
+.mini-teeth-row {
+    display: grid;
+    grid-template-columns: repeat(16, 1fr);
+    gap: 2px;
+    direction: ltr;
+}
+.mini-tooth {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.04);
+    color: #546e7a;
+    border-radius: 4px;
+    font-size: 0.55rem;
+    font-weight: 700;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.2s;
+    min-height: 18px;
+}
+.mini-tooth.treated {
+    background: linear-gradient(135deg, #ffd700, #ffb300);
+    color: #1a1a2e;
+    border-color: #ffd700;
+    box-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
+}
+.mini-jaw-divider {
+    height: 4px;
+    margin: 3px 0;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.case-card { cursor: pointer; transition: all 0.2s; }
+.case-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 215, 0, 0.15);
+}
+
+.archive-toggle-wrap {
+    flex: 0 0 auto !important;
+    min-width: auto !important;
+    gap: 6px;
+}
+.archive-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 26px;
+}
+.archive-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.archive-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: #455a64;
+    border-radius: 26px;
+    transition: 0.3s;
+}
+.archive-slider:before {
+    content: "";
+    position: absolute;
+    height: 20px;
+    width: 20px;
+    right: 3px;
+    top: 3px;
+    background-color: white;
+    border-radius: 50%;
+    transition: 0.3s;
+}
+.archive-switch input:checked + .archive-slider {
+    background-color: #ffb300;
+}
+.archive-switch input:checked + .archive-slider:before {
+    transform: translateX(-24px);
+}
+
+.card-info-bar {
+    border-bottom: none !important;
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+.card-tabs {
+    background: rgba(0, 0, 0, 0.3);
+}
