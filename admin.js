@@ -23,6 +23,7 @@ let currentFilterStatus = '';
 let currentFilterPayment = '';
 let currentFilterDate = '';
 let currentFilterHasScanner = '';
+let currentArchiveFilter = 'new';
 let currentAICase = null;
 let currentAIConversation = [];
 let openAiApiKey = null;
@@ -94,6 +95,14 @@ async function loadAllCases() {
                         for (const [caseId, caseInfo] of Object.entries(casesData)) {
                             if (caseInfo && typeof caseInfo === 'object') {
                                 const fullDate = `${year}/${month}/${day}`;
+                                const conv = caseInfo.conversation;
+                                let hasUnreadMsg = false;
+                                if (Array.isArray(conv) && conv.length > 0) {
+                                    const lastMsg = conv[conv.length - 1];
+                                    if (lastMsg && lastMsg.role === 'user') {
+                                        hasUnreadMsg = true;
+                                    }
+                                }
                                 allCases.push({
                                     ...caseInfo,
                                     _year: year,
@@ -102,7 +111,8 @@ async function loadAllCases() {
                                     _doctorName: doctorName,
                                     _fullDate: fullDate,
                                     caseId: caseId,
-                                    hasScannerFile: !!(caseInfo.scannerFile || caseInfo.scannerFileUrl)
+                                    hasScannerFile: !!(caseInfo.scannerFile || caseInfo.scannerFileUrl),
+                                    _hasUnreadMsg: hasUnreadMsg
                                 });
                             }
                         }
@@ -234,7 +244,8 @@ async function loadWaitingCases() {
                                     _doctorName: doctorName,
                                     _fullDate: `${year}/${month}/${day}`,
                                     caseId: caseId,
-                                    hasScannerFile: !!(caseInfo.scannerFile || caseInfo.scannerFileUrl)
+                                    hasScannerFile: !!(caseInfo.scannerFile || caseInfo.scannerFileUrl),
+                                    _isWaiting: true
                                 });
                             }
                         }
@@ -250,45 +261,6 @@ async function loadWaitingCases() {
     }
 }
 
-async function loadInvoices() {
-    try {
-        const invoicesList = [];
-
-        for (const doctor of allDoctors) {
-            const snapshot = await database.ref(`dental lap/users/doctors/data/${doctor.doctorKey}/invoices`).once('value');
-            const invoices = snapshot.val() || {};
-
-            for (const [caseId, invoice] of Object.entries(invoices)) {
-                invoicesList.push({
-                    ...invoice,
-                    doctorName: doctor.doctorName,
-                    doctorKey: doctor.doctorKey,
-                    caseId: caseId,
-                    hasScannerFile: !!(invoice.scannerFile || invoice.scannerFileUrl)
-                });
-            }
-        }
-
-        invoicesList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-        renderInvoices(invoicesList);
-
-        const totalRevenue = invoicesList.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
-        const totalOutstanding = invoicesList.reduce((sum, inv) => sum + ((inv.total || 0) - (inv.paidAmount || 0)), 0);
-
-        document.getElementById('invoicesSummary').innerHTML = `
-            <div class="waiting-summary">
-                <div class="waiting-total">💰 الإيرادات المؤكدة (المدفوع): <strong>${totalRevenue.toLocaleString('en-US')} ج.م</strong></div>
-                <div class="waiting-total">📊 المستحقات الخارجية: <strong>${totalOutstanding.toLocaleString('en-US')} ج.م</strong></div>
-                <div class="waiting-total">📋 عدد الفواتير: <strong>${invoicesList.length}</strong></div>
-            </div>
-        `;
-
-        return invoicesList;
-    } catch (error) {
-        return [];
-    }
-}
-
 function updateStats() {
     const totalDoctors = allDoctors.length;
     const totalCases = allCases.length;
@@ -297,6 +269,21 @@ function updateStats() {
     document.getElementById('totalDoctors').textContent = totalDoctors;
     document.getElementById('totalCases').textContent = totalCases;
     document.getElementById('totalOutstanding').textContent = totalOutstanding.toLocaleString('en-US') + ' ج.م';
+    updateUnreadCount();
+}
+
+function updateUnreadCount() {
+    const unreadCount = allCases.filter(c => c._hasUnreadMsg).length;
+    const casesTab = document.querySelector('.tab-btn[data-tab="cases"]');
+    if (casesTab) {
+        const existingBadge = casesTab.querySelector('.tab-notif-badge');
+        if (existingBadge) existingBadge.remove();
+        if (unreadCount > 0) {
+            casesTab.innerHTML = `📋 الحالات <span class="tab-notif-badge">${unreadCount}</span>`;
+        } else {
+            casesTab.textContent = '📋 الحالات';
+        }
+    }
 }
 
 function updateDoctorFilter() {
@@ -311,7 +298,17 @@ function updateDoctorFilter() {
 }
 
 function applyFilters() {
+    const newCount = allCases.filter(c => !c.archived).length;
+    const archivedCount = allCases.filter(c => !!c.archived).length;
+    const newCountEl = document.getElementById('newCount');
+    const archCountEl = document.getElementById('archivedCount');
+    if (newCountEl) newCountEl.textContent = newCount;
+    if (archCountEl) archCountEl.textContent = archivedCount;
+
     filteredCases = allCases.filter(caseItem => {
+        const isArchived = !!caseItem.archived;
+        if (currentArchiveFilter === 'new' && isArchived) return false;
+        if (currentArchiveFilter === 'archived' && !isArchived) return false;
         if (currentSearchTerm) {
             const s = currentSearchTerm.toLowerCase();
             const m1 = (caseItem.patientName || '').toLowerCase().includes(s);
@@ -383,7 +380,6 @@ function renderDoctors() {
             </div>
             <div class="doctor-actions">
                 <button class="btn-view-cases" data-doctor="${escapeHtml(doctor.doctorKey)}">📋 عرض الحالات</button>
-                <button class="btn-view-invoice" data-doctor="${escapeHtml(doctor.doctorKey)}">💰 الفواتير</button>
             </div>
         </div>
     `).join('');
@@ -397,14 +393,6 @@ function renderDoctors() {
         });
     });
 
-    document.querySelectorAll('.btn-view-invoice').forEach(btn => {
-        btn.addEventListener('click', () => {
-            currentFilterDoctor = btn.dataset.doctor;
-            document.getElementById('filterDoctor').value = btn.dataset.doctor;
-            applyFilters();
-            document.querySelector('.tab-btn[data-tab="invoices"]').click();
-        });
-    });
 }
 
 function renderCases() {
@@ -444,12 +432,14 @@ function renderCases() {
 
         const hasScanner = !!(caseItem.scannerFile || caseItem.scannerFileUrl);
         const scannerClass = hasScanner ? 'has-scanner' : '';
+        const unreadClass = caseItem._hasUnreadMsg ? 'has-unread' : '';
 
         return `
-            <div class="case-card ${scannerClass}" data-idx="${idx}">
+            <div class="case-card ${scannerClass} ${unreadClass}" data-idx="${idx}">
                 <div class="case-header">
                     <span class="case-patient">👤 ${escapeHtml(caseItem.patientName)}</span>
                     <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                        ${caseItem._hasUnreadMsg ? '<span class="unread-badge">💬 رسالة جديدة</span>' : ''}
                         ${hasScanner ? '<span class="scanner-badge">📎 سكان</span>' : ''}
                         <span class="case-code">🔐 ${escapeHtml((caseItem.randomCode || '').slice(-8))}</span>
                     </div>
@@ -460,25 +450,24 @@ function renderCases() {
                     <div class="case-detail-item"><span class="status-badge status-${caseItem.orderStatus || 1}">${statusNames[caseItem.orderStatus] || 'جديد'}</span></div>
                     <div class="case-detail-item"><span class="pay-badge ${paymentClass}">${paymentText}</span></div>
                 </div>
+                ${renderMiniTeeth(caseItem.toothTreatments)}
                 <div class="case-footer-grid">
                     <div class="case-price-row">
                         <span class="case-price">💰 ${total.toLocaleString('en-US')} ج.م</span>
                         <span class="case-paid-inline">💵 مدفوع: ${paid.toLocaleString('en-US')} ج.م</span>
                         ${remaining > 0 && !isPaid ? `<span class="case-remaining-inline">📊 متبقي: ${remaining.toLocaleString('en-US')} ج.م</span>` : ''}
                     </div>
-                    <div class="case-actions-grid">
-                        <button class="btn-open-card" data-idx="${idx}">📋 فتح</button>
-                        ${hasScanner ? `<button class="btn-download-scanner" data-idx="${idx}">⬇️ سكان</button>` : ''}
-                    </div>
+                    ${hasScanner ? `<div class="case-actions-grid"><button class="btn-download-scanner" data-idx="${idx}">⬇️ سكان</button></div>` : ''}
                 </div>
             </div>
         `;
     }).join('');
 
-    document.querySelectorAll('.btn-open-card').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const idx = parseInt(btn.dataset.idx);
+    document.querySelectorAll('.case-card').forEach(card => {
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('.btn-download-scanner')) return;
+            const idx = parseInt(card.dataset.idx);
             openCaseCardView(pageCases[idx]);
         });
     });
@@ -495,6 +484,34 @@ function renderCases() {
     });
 
     renderPagination(totalPages);
+}
+
+function renderMiniTeeth(toothTreatments) {
+    const tt = toothTreatments || {};
+    const upper = [18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28];
+    const lower = [48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38];
+
+    const treatedCount = Object.keys(tt).length;
+
+    const buildRow = (teeth) => teeth.map(n => {
+        const t = tt[n];
+        const has = !!t;
+        const label = has ? (typeof t === 'object' ? (t.label || t.key || '') : String(t)) : '';
+        const titleText = has ? `سن ${n}: ${label}` : `سن ${n}`;
+        return `<span class="mini-tooth ${has ? 'treated' : ''}" title="${escapeHtml(titleText)}">${n}</span>`;
+    }).join('');
+
+    return `
+        <div class="mini-teeth-preview">
+            <div class="mini-teeth-header">
+                <span class="mini-teeth-title">🦷 خريطة الأسنان</span>
+                <span class="mini-teeth-count">${treatedCount} علاج</span>
+            </div>
+            <div class="mini-teeth-row mini-upper">${buildRow(upper)}</div>
+            <div class="mini-jaw-divider"></div>
+            <div class="mini-teeth-row mini-lower">${buildRow(lower)}</div>
+        </div>
+    `;
 }
 
 function renderPagination(totalPages) {
@@ -606,42 +623,6 @@ async function dispatchAllWaiting(waitingCases) {
     alert(`✅ تم إرسال ${success} حالة بنجاح\n❌ فشل ${failed} حالة`);
     loadWaitingCases();
     loadAllCases();
-}
-
-function renderInvoices(invoices) {
-    const container = document.getElementById('invoicesList');
-    if (!container) return;
-    if (invoices.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💰</div><p>لا توجد فواتير</p></div>';
-        return;
-    }
-    container.className = 'cases-grid';
-    container.innerHTML = invoices.map((inv, idx) => {
-        const hasScanner = !!(inv.scannerFile || inv.scannerFileUrl);
-        const scannerClass = hasScanner ? 'has-scanner' : '';
-        const total = inv.total || 0;
-        const paid = inv.paidAmount || 0;
-        const remaining = total - paid;
-        return `
-            <div class="case-card ${scannerClass}">
-                <div class="case-header">
-                    <span class="case-patient">👤 ${escapeHtml(inv.patientName)}</span>
-                    ${hasScanner ? '<span class="scanner-badge">📎 سكان</span>' : ''}
-                </div>
-                <div class="case-details-grid">
-                    <div class="case-detail-item">👨‍⚕️ ${escapeHtml(inv.doctorName)}</div>
-                    <div class="case-detail-item">📅 ${inv.date || ''}</div>
-                </div>
-                <div class="case-footer-grid">
-                    <div class="case-price-row">
-                        <span class="case-price">💰 ${total.toLocaleString('en-US')} ج.م</span>
-                        <span class="case-paid-inline">💵 ${paid.toLocaleString('en-US')} ج.م</span>
-                        ${remaining > 0 ? `<span class="case-remaining-inline">📊 ${remaining.toLocaleString('en-US')} ج.م</span>` : ''}
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
 }
 
 let _currentCardCaseData = null;
@@ -1013,6 +994,31 @@ function openCaseCardView(caseData) {
     document.getElementById('cardPaid').textContent = paid.toLocaleString('en-US') + ' ج.م';
     document.getElementById('cardRemaining').textContent = remaining.toLocaleString('en-US') + ' ج.م';
 
+    const archiveToggle = document.getElementById('archiveToggle');
+    const archiveWrap = archiveToggle ? archiveToggle.closest('.archive-toggle-wrap') : null;
+    if (archiveToggle) {
+        if (caseData._isWaiting) {
+            if (archiveWrap) archiveWrap.style.display = 'none';
+        } else {
+            if (archiveWrap) archiveWrap.style.display = '';
+            archiveToggle.checked = !!caseData.archived;
+            archiveToggle.onchange = async () => {
+                const isArchived = archiveToggle.checked;
+                const casePath = `dental lap/case data/${caseData._year}/${caseData._month}/${caseData._day}/${caseData._doctorName}/${caseData.caseId}`;
+                try {
+                    await database.ref(casePath).update({ archived: isArchived, archivedAt: isArchived ? Date.now() : null });
+                    caseData.archived = isArchived;
+                    const idx = allCases.findIndex(c => c.caseId === caseData.caseId && c._doctorName === caseData._doctorName && c._year === caseData._year && c._month === caseData._month && c._day === caseData._day);
+                    if (idx >= 0) allCases[idx].archived = isArchived;
+                    applyFilters();
+                } catch (err) {
+                    alert('❌ خطأ: ' + err.message);
+                    archiveToggle.checked = !isArchived;
+                }
+            };
+        }
+    }
+
     const scannerArea = document.getElementById('cardScannerArea');
     if (hasScanner) {
         scannerArea.innerHTML = `<button class="scanner-download-btn" id="cardDownloadScanner">📎 تحميل ملف السكان (${escapeHtml(caseData.scannerFile || '')})</button>`;
@@ -1058,6 +1064,15 @@ function openCaseCardView(caseData) {
     document.querySelectorAll('.card-tab-content').forEach(t => t.classList.remove('active'));
     document.querySelector('.card-tab-btn[data-card-tab="details"]').classList.add('active');
     document.getElementById('cardDetailsTab').classList.add('active');
+
+    const convTabBtn = document.querySelector('.card-tab-btn[data-card-tab="conversation"]');
+    if (convTabBtn) {
+        if (caseData._hasUnreadMsg) {
+            convTabBtn.innerHTML = '💬 المحادثة <span class="conv-notif-dot"></span>';
+        } else {
+            convTabBtn.textContent = '💬 المحادثة';
+        }
+    }
 
     modal.classList.add('active');
 }
@@ -1364,21 +1379,6 @@ function renderCardInvoice(caseData) {
     `).join('') : '<p style="color: #90a4ae;">لا توجد دفعات مسجلة</p>';
 
     container.innerHTML = `
-        <div class="payment-summary-card" id="invoiceSummaryCard">
-            <div class="payment-item">
-                <div class="payment-label">💰 الإجمالي</div>
-                <div class="payment-value" id="liveTotal">${total.toLocaleString('en-US')} ج.م</div>
-            </div>
-            <div class="payment-item">
-                <div class="payment-label">💵 المدفوع</div>
-                <div class="payment-value paid" id="livePaid">${paid.toLocaleString('en-US')} ج.م</div>
-            </div>
-            <div class="payment-item">
-                <div class="payment-label">📊 المتبقي</div>
-                <div class="payment-value ${remaining <= 0 ? 'paid' : 'remaining'}" id="liveRemaining">${remaining.toLocaleString('en-US')} ج.م</div>
-            </div>
-        </div>
-
         <div class="new-payment-section">
             <h4>💵 تسجيل دفعة جديدة</h4>
             <div class="new-payment-form">
@@ -1401,14 +1401,10 @@ function renderCardInvoice(caseData) {
         const previewPaid = paid + typedAmount;
         const previewRemaining = Math.max(0, total - previewPaid);
 
-        document.getElementById('livePaid').textContent = previewPaid.toLocaleString('en-US') + ' ج.م';
-        document.getElementById('liveRemaining').textContent = previewRemaining.toLocaleString('en-US') + ' ج.م';
-
-        const remEl = document.getElementById('liveRemaining');
-        remEl.className = 'payment-value ' + (previewRemaining <= 0 ? 'paid' : 'remaining');
-
         document.getElementById('cardPaid').textContent = previewPaid.toLocaleString('en-US') + ' ج.م';
         document.getElementById('cardRemaining').textContent = previewRemaining.toLocaleString('en-US') + ' ج.م';
+        const cardRemEl = document.getElementById('cardRemaining');
+        cardRemEl.className = 'value ' + (previewRemaining <= 0 ? 'paid' : 'remaining');
     });
 
     document.getElementById('saveNewPayment').addEventListener('click', async () => {
@@ -1537,6 +1533,17 @@ async function sendAdminReply(caseData, conversation) {
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
         conversation.push({ role: 'admin', content: text });
+
+        if (_currentCardCaseData) {
+            _currentCardCaseData._hasUnreadMsg = false;
+        }
+        const convTabBtn = document.querySelector('.card-tab-btn[data-card-tab="conversation"]');
+        if (convTabBtn) convTabBtn.textContent = '💬 المحادثة';
+
+        const caseIdx = allCases.findIndex(c => c.caseId === caseData.caseId && c._doctorName === caseData._doctorName && c._year === caseData._year && c._month === caseData._month && c._day === caseData._day);
+        if (caseIdx >= 0) allCases[caseIdx]._hasUnreadMsg = false;
+        updateUnreadCount();
+        applyFilters();
     } catch (err) {
         alert('❌ خطأ في إرسال الرد: ' + err.message);
     }
@@ -1787,7 +1794,15 @@ function initEventListeners() {
             document.getElementById(`${tabId}Tab`).classList.add('active');
             if (tabId === 'workflow') loadWorkflow();
             if (tabId === 'waiting') loadWaitingCases();
-            if (tabId === 'invoices') loadInvoices();
+        });
+    });
+
+    document.querySelectorAll('.archive-subtab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentArchiveFilter = btn.dataset.archiveFilter;
+            document.querySelectorAll('.archive-subtab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            applyFilters();
         });
     });
 
